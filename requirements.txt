@@ -1,0 +1,4 @@
+echo fastapi > requirements.txt
+echo "uvicorn[standard]" >> requirements.txt
+echo sqlalchemy >> requirements.txt
+echo pydantic >> requirements.txt

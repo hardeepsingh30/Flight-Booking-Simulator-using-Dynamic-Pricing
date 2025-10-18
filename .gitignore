@@ -1,0 +1,5 @@
+echo __pycache__/ > .gitignore
+echo venv/ >> .gitignore
+echo *.sqlite >> .gitignore
+echo flights.db >> .gitignore
+echo .env >> .gitignore
