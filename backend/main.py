@@ -1,8 +1,9 @@
 
-# MILESTONE 2
+# ==========================
+# ✅ MILESTONE 2 (EXISTING)
+# ==========================
 
-
-# main.py
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi import FastAPI, HTTPException, Depends, Query
 from pydantic import BaseModel, Field
 from typing import Optional, List
@@ -22,8 +23,7 @@ engine = create_engine(DB_URL, connect_args={"check_same_thread": False}, future
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 Base = declarative_base()
 
-
-# --- LIFESPAN + APP INITIALIZATION AT THE TOP ---
+# --- BACKGROUND SIMULATOR (same as before for Milestone 2) ---
 async def simulator_loop(interval_seconds: int = 60):
     while True:
         await asyncio.sleep(interval_seconds)
@@ -34,9 +34,20 @@ async def lifespan(app: FastAPI):
     yield
 
 app = FastAPI(title="Flight Booking Simulator", lifespan=lifespan)
-# ------------------------------------------------
 
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],  # Vite default
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+# ==========================
+# ✅ DATABASE MODELS
+# ==========================
 class Airline(Base):
     __tablename__ = "airlines"
     id = Column(Integer, primary_key=True)
@@ -58,6 +69,10 @@ class Flight(Base):
 
     airline = relationship("Airline")
 
+
+# ==========================
+# ✅ MILESTONE 3 STARTS HERE
+# ==========================
 class Booking(Base):
     __tablename__ = "bookings"
     id = Column(Integer, primary_key=True)
@@ -67,7 +82,11 @@ class Booking(Base):
     passenger_phone = Column(String)
     seat_no = Column(Integer)
     price_paid = Column(DECIMAL(10,2))
-    status = Column(String, default="CONFIRMED")
+    status = Column(String, default="INITIATED")  # INITIATED, CONFIRMED, CANCELLED
+    payment_status = Column(String, default="PENDING")  # PENDING, PAID, FAILED
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
 
 class FareHistory(Base):
     __tablename__ = "fare_history"
@@ -78,7 +97,19 @@ class FareHistory(Base):
 
 Base.metadata.create_all(bind=engine)
 
-# Pydantic schemas
+
+# ==========================
+# ✅ Pydantic Schemas
+# ==========================
+class Passenger(BaseModel):
+    passenger_name: str = Field(..., min_length=3)
+    passenger_phone: Optional[str]
+
+class BookingRequest(BaseModel):
+    flight_id: int
+    passenger: Passenger
+    seat_no: Optional[int] = None
+
 class FlightOut(BaseModel):
     id: int
     flight_no: str
@@ -94,7 +125,40 @@ class FlightOut(BaseModel):
     class Config:
         from_attributes = True
 
-# Dependency
+class BookingDetails(BaseModel):
+    pnr: str
+    flight_no: str
+    passenger_name: str
+    passenger_phone: Optional[str]
+    price_paid: float
+    status: str
+    payment_status: str
+    departure: datetime
+    arrival: datetime
+    origin: str
+    destination: str
+
+    class Config:
+        from_attributes = True
+
+class BookingSummary(BaseModel):
+    pnr: str
+    flight_no: str
+    passenger_name: str
+    price_paid: float
+    status: str
+    payment_status: str
+    origin: str
+    destination: str
+    departure: datetime
+
+    class Config:
+        from_attributes = True
+
+
+# ==========================
+# ✅ Dependency
+# ==========================
 def get_db():
     db = SessionLocal()
     try:
@@ -102,6 +166,10 @@ def get_db():
     finally:
         db.close()
 
+
+# ==========================
+# ✅ MILESTONE 2 EXISTING FLIGHT ENDPOINTS (UNCHANGED)
+# ==========================
 @app.get("/flights", response_model=List[FlightOut])
 def list_flights(
     sort_by: Optional[str] = Query(None, pattern="^(price|duration)$"),
@@ -110,53 +178,19 @@ def list_flights(
 ):
     q = db.query(Flight).join(Airline, isouter=True)
     flights = q.limit(limit).all()
-
-    # transform to FlightOut list, dynamic_price not inserted here (use /dynamic_price endpoint)
-    out = []
-    for f in flights:
-        out.append(FlightOut(
+    out = [
+        FlightOut(
             id=f.id, flight_no=f.flight_no, origin=f.origin, destination=f.destination,
             departure=f.departure, arrival=f.arrival, base_fare=float(f.base_fare),
             seats_available=f.seats_available, total_seats=f.total_seats,
             airline_name=f.airline.name if f.airline else None
-        ))
-    # Sorting optionally by duration or price (price=base_fare for simple sorting)
+        )
+        for f in flights
+    ]
+
     if sort_by == "duration":
         out.sort(key=lambda x: (x.arrival - x.departure).total_seconds())
     elif sort_by == "price":
-        out.sort(key=lambda x: x.base_fare)
-    return out
-
-@app.get("/search", response_model=List[FlightOut])
-def search_flights(
-    origin: Optional[str] = None,
-    destination: Optional[str] = None,
-    date: Optional[datetime] = None,
-    sort: Optional[str] = Query(None, pattern="^(price|duration)$"),
-    db=Depends(get_db)
-):
-    q = db.query(Flight).join(Airline, isouter=True)
-    if origin:
-        q = q.filter(func.lower(Flight.origin) == origin.lower())
-    if destination:
-        q = q.filter(func.lower(Flight.destination) == destination.lower())
-    if date:
-        start = datetime(date.year, date.month, date.day)
-        end = start + timedelta(days=1)
-        q = q.filter(Flight.departure >= start, Flight.departure < end)
-    flights = q.all()
-
-    out = []
-    for f in flights:
-        out.append(FlightOut(
-            id=f.id, flight_no=f.flight_no, origin=f.origin, destination=f.destination,
-            departure=f.departure, arrival=f.arrival, base_fare=float(f.base_fare),
-            seats_available=f.seats_available, total_seats=f.total_seats,
-            airline_name=f.airline.name if f.airline else None
-        ))
-    if sort == "duration":
-        out.sort(key=lambda x: (x.arrival - x.departure).total_seconds())
-    elif sort == "price":
         out.sort(key=lambda x: x.base_fare)
     return out
 
@@ -219,31 +253,172 @@ class BookingRequest(BaseModel):
     passenger: Passenger
     seat_no: Optional[int] = None
 
-@app.post("/booking")
-def create_booking(req: BookingRequest, db=Depends(get_db)):
+# ==========================
+# ✅ NEW MILESTONE 3 ENDPOINT: /booking/initiate
+# ==========================
+
+@app.post("/booking/initiate")
+def initiate_booking(req: BookingRequest, db=Depends(get_db)):
     try:
-        # start tx
         flight = db.query(Flight).with_for_update().filter(Flight.id == req.flight_id).first()
         if not flight:
             raise HTTPException(status_code=404, detail="Flight not found")
         if flight.seats_available <= 0:
             raise HTTPException(status_code=400, detail="No seats available")
 
-        # calculate price
         demand_index = random.uniform(0.2, 0.9)
         airline_tier = flight.airline.tier if flight.airline else "standard"
-        price = calculate_dynamic_price(float(flight.base_fare), flight.seats_available, flight.total_seats, flight.departure, demand_index, airline_tier)
+        price = calculate_dynamic_price(
+            float(flight.base_fare), flight.seats_available,
+            flight.total_seats, flight.departure, demand_index, airline_tier
+        )
 
-        # reserve seat
         flight.seats_available -= 1
         pnr = f"PNR{random.randint(100000, 999999)}"
-        booking = Booking(pnr=pnr, flight_id=flight.id, passenger_name=req.passenger.passenger_name, passenger_phone=req.passenger.passenger_phone, seat_no=req.seat_no, price_paid=price, status="CONFIRMED")
+
+        booking = Booking(
+            pnr=pnr,
+            flight_id=flight.id,
+            passenger_name=req.passenger.passenger_name,
+            passenger_phone=req.passenger.passenger_phone,
+            seat_no=req.seat_no,
+            price_paid=price,
+            status="INITIATED",
+            payment_status="PENDING"
+        )
+
         db.add(booking)
         db.commit()
-        return {"message":"Booking successful", "pnr": pnr, "price": price}
+        return {"message": "Booking initiated", "pnr": pnr, "price": price, "status": "INITIATED", "payment_status": "PENDING"}
     except SQLAlchemyError as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
+
+# ==========================
+# ✅ NEW MILESTONE 3 ENDPOINT: /booking/pay/{pnr}
+# ==========================
+from pydantic import BaseModel
+
+class PaymentRequest(BaseModel):
+    success: bool
+
+@app.post("/booking/pay/{pnr}")
+def process_payment(pnr: str, req: PaymentRequest, db=Depends(get_db)):
+    booking = db.query(Booking).filter(Booking.pnr == pnr).first()
+
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
+
+    # If already paid, prevent duplicate processing
+    if booking.payment_status == "PAID":
+        return {"message": "Booking already confirmed", "pnr": booking.pnr, "status": booking.status}
+
+    if req.success:
+        booking.payment_status = "PAID"
+        booking.status = "CONFIRMED"
+    else:
+        booking.payment_status = "FAILED"
+        # status stays INITIATED (user can retry payment later)
+
+    db.commit()
+
+    return {
+        "message": "Payment processed",
+        "pnr": booking.pnr,
+        "status": booking.status,
+        "payment_status": booking.payment_status
+    }
+
+@app.post("/booking/cancel/{pnr}")
+def cancel_booking(pnr: str, db=Depends(get_db)):
+    booking = db.query(Booking).filter(Booking.pnr == pnr).first()
+
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
+
+    if booking.status == "CANCELLED":
+        return {"message": "Booking is already cancelled", "pnr": booking.pnr}
+
+    # Restore seat if booking was valid (INITIATED or CONFIRMED)
+    flight = db.query(Flight).filter(Flight.id == booking.flight_id).first()
+    if flight and flight.seats_available < flight.total_seats:
+        flight.seats_available += 1
+
+    booking.status = "CANCELLED"
+    
+    db.commit()
+
+    return {
+        "message": "Booking cancelled",
+        "pnr": booking.pnr,
+        "status": booking.status,
+        "payment_status": booking.payment_status
+    }
+
+@app.get("/booking/{pnr}", response_model=BookingDetails)
+def get_booking_details(pnr: str, db=Depends(get_db)):
+    booking = db.query(Booking).filter(Booking.pnr == pnr).first()
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
+
+    flight = db.query(Flight).filter(Flight.id == booking.flight_id).first()
+    if not flight:
+        raise HTTPException(status_code=404, detail="Flight linked to booking not found")
+
+    return BookingDetails(
+        pnr=booking.pnr,
+        flight_no=flight.flight_no,
+        passenger_name=booking.passenger_name,
+        passenger_phone=booking.passenger_phone,
+        price_paid=float(booking.price_paid),
+        status=booking.status,
+        payment_status=booking.payment_status,
+        departure=flight.departure,
+        arrival=flight.arrival,
+        origin=flight.origin,
+        destination=flight.destination
+    )
+
+@app.get("/bookings", response_model=List[BookingSummary])
+def get_all_bookings(
+    passenger_phone: Optional[str] = None,
+    status: Optional[str] = None,
+    payment_status: Optional[str] = None,
+    db=Depends(get_db)
+):
+    query = db.query(Booking)
+
+    if passenger_phone:
+        query = query.filter(Booking.passenger_phone == passenger_phone)
+
+    if status:
+        query = query.filter(Booking.status == status.upper())
+
+    if payment_status:
+        query = query.filter(Booking.payment_status == payment_status.upper())
+
+    bookings = query.all()
+
+    result = []
+    for b in bookings:
+        flight = db.query(Flight).filter(Flight.id == b.flight_id).first()
+        if flight:
+            result.append(
+                BookingSummary(
+                    pnr=b.pnr,
+                    flight_no=flight.flight_no,
+                    passenger_name=b.passenger_name,
+                    price_paid=float(b.price_paid),
+                    status=b.status,
+                    payment_status=b.payment_status,
+                    origin=flight.origin,
+                    destination=flight.destination,
+                    departure=flight.departure
+                )
+            )
+
+    return result
+
 
 ## background simulator
 async def simulator_loop(interval_seconds: int = 60):
@@ -271,18 +446,9 @@ async def simulator_loop(interval_seconds: int = 60):
         await asyncio.sleep(interval_seconds)
 
 
-# ✅ define lifespan and app ONCE
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    asyncio.create_task(simulator_loop(60))
-    yield
-
-app = FastAPI(title="Flight Booking Simulator", lifespan=lifespan)
 
 
-
-
-#    End of milestone 2
+#    End of milestone 2 & 3
 
 
 
