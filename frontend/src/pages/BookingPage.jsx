@@ -1,7 +1,6 @@
-import { useNavigate } from "react-router-dom";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { useEffect, useState } from "react";
-import { CheckCircleIcon } from '@heroicons/react/24/solid';  // ✅ Icon imported for loading spinner
+import { ArrowPathIcon } from '@heroicons/react/24/outline'; // ✅ Better spinner icon
 
 export default function BookingPage() {
   const { flightId } = useParams();
@@ -29,12 +28,17 @@ export default function BookingPage() {
         body: JSON.stringify({
           flight_id: parseInt(flightId),
           seat_no: seatNo ? parseInt(seatNo) : null,
-          passenger: { passenger_name: passengerName, passenger_phone: passengerPhone },
+          passenger: {
+            passenger_name: passengerName,
+            passenger_phone: passengerPhone,
+          },
         }),
       });
+
       if (!res.ok) throw new Error("Booking failed");
       const data = await res.json();
       setResponse(data);
+
       if (data.pnr) {
         navigate(`/pay/${data.pnr}`);
       }
@@ -49,14 +53,16 @@ export default function BookingPage() {
     <div className="p-6">
       <h1 className="text-xl font-bold mb-4">Booking for Flight #{flightId}</h1>
 
-      {flight && (
+      {flight ? (
         <div className="mb-4 p-4 border rounded bg-gray-50">
           <p><strong>Dynamic Price:</strong> ₹{flight.dynamic_price}</p>
           <p><strong>Seats Available:</strong> {flight.seats_available}</p>
         </div>
+      ) : (
+        <p className="text-gray-500 mb-4">Loading flight details...</p>
       )}
 
-      <div className="mb-4 grid grid-cols-1 md:grid-cols-2 gap-4">  {/* ✅ Responsive grid added */}
+      <div className="mb-4 grid grid-cols-1 md:grid-cols-2 gap-4">
         <input
           className="border p-2 w-full"
           placeholder="Passenger Name"
@@ -65,13 +71,13 @@ export default function BookingPage() {
         />
         <input
           className="border p-2 w-full"
-          placeholder="Phone"
+          placeholder="Phone Number"
           value={passengerPhone}
           onChange={(e) => setPassengerPhone(e.target.value)}
         />
         <input
-          className="border p-2 w-full md:col-span-2"  // Seat No spans full width on larger screens
-          placeholder="Seat No (optional)"
+          className="border p-2 w-full md:col-span-2"
+          placeholder="Seat No (Optional)"
           value={seatNo}
           onChange={(e) => setSeatNo(e.target.value)}
         />
@@ -80,11 +86,13 @@ export default function BookingPage() {
       <button
         disabled={loading}
         onClick={handleBooking}
-        className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition-colors flex items-center"
+        className={`px-4 py-2 rounded flex items-center justify-center transition-colors 
+          ${loading ? "bg-blue-400 cursor-not-allowed" : "bg-blue-600 hover:bg-blue-700 text-white"}
+        `}
       >
         {loading ? (
           <>
-            <CheckCircleIcon className="w-5 h-5 animate-spin mr-2" />  {/* ✅ Loading spinner */}
+            <ArrowPathIcon className="w-5 h-5 animate-spin mr-2" />
             Processing...
           </>
         ) : (
