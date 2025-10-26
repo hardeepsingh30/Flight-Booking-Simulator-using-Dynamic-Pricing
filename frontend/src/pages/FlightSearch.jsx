@@ -1,4 +1,4 @@
-import { MagnifyingGlassIcon, PlaneIcon } from '@heroicons/react/24/outline'; 
+import { MagnifyingGlassIcon, PaperAirplaneIcon } from '@heroicons/react/24/solid';
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
@@ -7,9 +7,11 @@ export default function FlightSearch() {
   const [destination, setDestination] = useState("");
   const [date, setDate] = useState("");
   const [flights, setFlights] = useState([]);
+  const [loading, setLoading] = useState(false); // ✅ NEW: Loading state
   const navigate = useNavigate();
 
   const handleSearch = async () => {
+    setLoading(true); // ✅ Start loading
     const formattedDate = date ? new Date(date).toISOString() : null;
 
     const url = new URL("http://127.0.0.1:8000/search");
@@ -24,6 +26,8 @@ export default function FlightSearch() {
       setFlights(data);
     } catch (error) {
       alert("Error fetching flights: " + error.message);
+    } finally {
+      setLoading(false); // ✅ Stop loading
     }
   };
 
@@ -52,10 +56,21 @@ export default function FlightSearch() {
         />
         <button
           onClick={handleSearch}
-          className="bg-blue-500 text-white px-4 py-2 rounded flex items-center hover:bg-blue-600 transition-colors"
+          disabled={loading} // ✅ Disable while loading
+          className={`px-4 py-2 rounded flex items-center transition-colors text-white 
+          ${loading ? "bg-gray-400 cursor-not-allowed" : "bg-blue-500 hover:bg-blue-600"}`}
         >
-          <MagnifyingGlassIcon className="w-5 h-5 mr-2" />  {/* ✅ Search icon added */}
-          Search
+          {loading ? (
+            <span className="flex items-center animate-pulse">
+              <MagnifyingGlassIcon className="w-5 h-5 mr-2" />
+              Searching...
+            </span>
+          ) : (
+            <>
+              <MagnifyingGlassIcon className="w-5 h-5 mr-2" />
+              Search
+            </>
+          )}
         </button>
       </div>
 
@@ -66,18 +81,14 @@ export default function FlightSearch() {
           flights.map((flight) => (
             <div
               key={flight.id}
-              className="p-4 border rounded mb-4 hover:shadow-lg transition-shadow cursor-pointer"  // ✅ Hover effect added
+              className="p-4 border rounded mb-4 hover:shadow-lg transition-shadow cursor-pointer"
             >
               <h2 className="font-bold flex items-center">
-                <PlaneIcon className="w-5 h-5 mr-2" />  {/* ✅ Plane icon added */}
+                <PaperAirplaneIcon className="w-4 h-4 mr-2 text-blue-600" />
                 {flight.flight_no}
               </h2>
-              <p>
-                {flight.origin} → {flight.destination}
-              </p>
-              <p>
-                Departure: {new Date(flight.departure).toLocaleString()}
-              </p>
+              <p>{flight.origin} → {flight.destination}</p>
+              <p>Departure: {new Date(flight.departure).toLocaleString()}</p>
               <p>Base Fare: ₹{flight.base_fare}</p>
               <button
                 onClick={() => navigate(`/book/${flight.id}`)}
