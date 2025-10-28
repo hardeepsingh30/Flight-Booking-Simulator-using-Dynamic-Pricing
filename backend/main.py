@@ -76,7 +76,7 @@ class Flight(Base):
 class Booking(Base):
     __tablename__ = "bookings"
     id = Column(Integer, primary_key=True)
-    pnr = Column(String, unique=True)
+    pnr = Column(String, unique=True)                 # 🎯 PNR is the unique booking identifier (starts here)
     flight_id = Column(Integer, ForeignKey("flights.id"))
     passenger_name = Column(String, nullable=False)
     passenger_phone = Column(String)
@@ -449,6 +449,7 @@ async def simulator_loop(interval_seconds: int = 60):
 
 
 #    End of milestone 2 & 3
+
 
 
 
