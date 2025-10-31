@@ -1,10 +1,36 @@
-import { StrictMode } from 'react'
-import { createRoot } from 'react-dom/client'
-import './index.css'
-import App from './App.jsx'
+import React from "react";
+import ReactDOM from "react-dom/client";
+import App from "./App";
+import "./index.css";
+import { Toaster } from "react-hot-toast"; // ✅ Toast provider import
 
-createRoot(document.getElementById('root')).render(
-  <StrictMode>
+ReactDOM.createRoot(document.getElementById("root")).render(
+  <React.StrictMode>
     <App />
-  </StrictMode>,
-)
+    {/* ✅ Global toast notification setup */}
+    <Toaster
+      position="top-right"
+      toastOptions={{
+        duration: 3000,
+        style: {
+          background: "#333",
+          color: "#fff",
+          borderRadius: "10px",
+          fontSize: "0.9rem",
+        },
+        success: {
+          iconTheme: {
+            primary: "#4ade80", // Tailwind green-400
+            secondary: "#fff",
+          },
+        },
+        error: {
+          iconTheme: {
+            primary: "#ef4444", // Tailwind red-500
+            secondary: "#fff",
+          },
+        },
+      }}
+    />
+  </React.StrictMode>
+);
