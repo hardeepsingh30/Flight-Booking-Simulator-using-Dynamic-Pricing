@@ -1,78 +1,91 @@
 # backend/seed_data.py
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
+import random
 from main import SessionLocal, Airline, Flight, Base, engine
 
+# India Standard Time (UTC+5:30)
+IST = timezone(timedelta(hours=5, minutes=30))
+
 def seed_db():
-    # ensure tables exist
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
     try:
-        # clear previous for idempotent seed (optional)
+        # clear old data
         db.query(Flight).delete()
         db.query(Airline).delete()
         db.commit()
 
         # create airlines
-        a1 = Airline(name="Air India", tier="standard")
-        a2 = Airline(name="Indigo", tier="budget")
-        a3 = Airline(name="SpiceJet", tier="budget")
-        a4 = Airline(name="Vistara", tier="premium")
-        db.add_all([a1, a2, a3, a4])
+        airlines = [
+            Airline(name="Air India", tier="standard"),
+            Airline(name="IndiGo", tier="budget"),
+            Airline(name="SpiceJet", tier="budget"),
+            Airline(name="Vistara", tier="premium"),
+            Airline(name="Akasa Air", tier="budget"),
+        ]
+        db.add_all(airlines)
         db.commit()
 
-        now = datetime.utcnow()
-        flights = [
-            Flight(
-                flight_no="AI101",
-                airline_id=a1.id,
-                origin="Mumbai",
-                destination="Delhi",
-                departure=now + timedelta(days=1, hours=3),
-                arrival=now + timedelta(days=1, hours=5),
-                base_fare=Decimal("4500.00"),
-                total_seats=180,
-                seats_available=120
-            ),
-            Flight(
-                flight_no="6E202",
-                airline_id=a2.id,
-                origin="Mumbai",
-                destination="Bangalore",
-                departure=now + timedelta(days=2, hours=2),
-                arrival=now + timedelta(days=2, hours=4),
-                base_fare=Decimal("3200.00"),
-                total_seats=180,
-                seats_available=80
-            ),
-            Flight(
-                flight_no="SG303",
-                airline_id=a3.id,
-                origin="Delhi",
-                destination="Jaipur",
-                departure=now + timedelta(hours=8),
-                arrival=now + timedelta(hours=9, minutes=15),
-                base_fare=Decimal("2500.00"),
-                total_seats=100,
-                seats_available=10
-            ),
-            Flight(
-                flight_no="VU404",
-                airline_id=a4.id,
-                origin="Chennai",
-                destination="Mumbai",
-                departure=now + timedelta(days=5),
-                arrival=now + timedelta(days=5, hours=2),
-                base_fare=Decimal("5600.00"),
-                total_seats=150,
-                seats_available=150
-            ),
+        # list of cities
+        cities = [
+            "Mumbai", "Delhi", "Bangalore", "Chennai", "Hyderabad",
+            "Pune", "Kolkata", "Jaipur", "Ahmedabad", "Goa"
         ]
+
+        # Base time in IST
+        now = datetime.now(IST)
+
+        airline_prefix = {
+            "Air India": "AI",
+            "IndiGo": "6E",
+            "SpiceJet": "SG",
+            "Vistara": "UK",
+            "Akasa Air": "QP"
+        }
+
+        flights = []
+        flight_no_counter = 100
+
+        for i in range(20):  # ✅ generate 20 future flights
+            origin, destination = random.sample(cities, 2)
+            airline = random.choice(airlines)
+
+            # schedule within next 10 days
+            dep_time = now + timedelta(days=random.randint(1, 10), hours=random.randint(5, 22))
+            arr_time = dep_time + timedelta(hours=random.randint(1, 3), minutes=random.randint(0, 59))
+
+            base_fare = Decimal(str(round(random.uniform(2500, 9000), 2)))
+            total_seats = random.choice([120, 150, 180])
+            seats_available = random.randint(20, total_seats)
+
+            flight = Flight(
+                flight_no=f"{airline_prefix[airline.name]}{flight_no_counter + i}",
+                airline_id=airline.id,
+                origin=origin,
+                destination=destination,
+                departure=dep_time,
+                arrival=arr_time,
+                base_fare=base_fare,
+                total_seats=total_seats,
+                seats_available=seats_available
+            )
+            flights.append(flight)
+
         db.add_all(flights)
         db.commit()
-        print("Seeded DB with sample airlines and flights.")
+
+        print(f"✅ Seeded {len(flights)} flights successfully (IST time zone)\n")
+        for f in flights:
+            print(
+                f"✈️ {f.flight_no}: {f.origin} → {f.destination} | "
+                f"{f.departure.strftime('%Y-%m-%d %H:%M')} | "
+                f"₹{f.base_fare}"
+            )
+
     finally:
         db.close()
+
 
 if __name__ == "__main__":
     seed_db()
